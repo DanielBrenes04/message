@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Un mensaje</title>
+<meta property="og:title" content="Un mensaje">
+<meta property="og:description" content="Un mensaje">
+<meta property="og:image" content="preview.png">
+<meta name="theme-color" content="#0b0f0b">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg: #060906;
+    --bg-vignette: #0c130c;
+    --green: #39ff6a;
+    --green-dim: #1f8a3d;
+    --green-faint: #123219;
+    --amber: #ffd166;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    overflow: hidden;
+  }
+
+  body{
+    font-family: 'VT323', monospace;
+    color: var(--green);
+  }
+
+
+  .crt{
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    background:
+      radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%),
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.18) 0px,
+        rgba(0,0,0,0.18) 1px,
+        transparent 2px,
+        transparent 3px
+      );
+    mix-blend-mode: multiply;
+    opacity: 0.55;
+  }
+
+  .crt-flicker{
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 51;
+    background: rgba(57,255,106,0.02);
+    animation: flicker 6s infinite;
+  }
+
+  body.message-active .crt,
+  body.message-active .crt-flicker{
+    display: none;
+  }
+
+  @keyframes flicker{
+    0%, 96%, 100% { opacity: 0; }
+    97% { opacity: 1; }
+    98% { opacity: 0; }
+  }
+
+  .screen{
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6vh 6vw;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.9s ease;
+  }
+
+  .screen.active{
+    opacity: 1;
+    visibility: visible;
+  }
+
+  #screen-warning .warning-box{
+    max-width: 640px;
+    text-align: center;
+  }
+
+  .warning-mark{
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    color: var(--amber);
+    line-height: 1;
+    margin-bottom: 0.5rem;
+    text-shadow: 0 0 12px rgba(255,209,102,0.5);
+  }
+
+  .warning-text{
+    font-size: clamp(1.3rem, 2.6vw, 1.7rem);
+    line-height: 1.5;
+    color: var(--green);
+    text-shadow: 0 0 6px rgba(57,255,106,0.35);
+  }
+
+  .warning-sub{
+    margin-top: 2rem;
+    font-size: 1.1rem;
+    color: var(--green-dim);
+  }
+
+  .blink{
+    animation: blink 1s steps(1) infinite;
+  }
+
+  @keyframes blink{
+    50% { opacity: 0; }
+  }
+
+  #screen-message{
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 8vh 8vw;
+  }
+
+  .console{
+    width: min(680px, 92vw);
+    margin: 0 auto;
+    height: 100%;
+    overflow-y: auto;
+    background: var(--bg);
+  }
+
+  #console-text{
+    font-size: clamp(1.2rem, 2.3vw, 1.55rem);
+    line-height: 1.7;
+  }
+
+  .line{
+    white-space: pre-wrap;
+    margin: 0 0 1.4rem 0;
+  }
+
+  .prompt-line{
+    color: var(--green-dim);
+    margin: 0 0 1.8rem 0;
+  }
+
+  .cursor{
+    display: inline-block;
+    width: 0.55em;
+    height: 1.1em;
+    background: var(--green);
+    vertical-align: text-bottom;
+    margin-left: 2px;
+    animation: blink 0.9s steps(1) infinite;
+  }
+</style>
+</head>
+<body>
+
+<div class="crt"></div>
+<div class="crt-flicker"></div>
+
+<section id="screen-warning" class="screen active">
+  <div class="warning-box">
+    <p class="warning-text">
+      Hi there
+    </p>
+    <p class="warning-text">
+      Is anyone there?
+    </p>
+    <p class="warning-sub">Press <strong>Enter</strong> to continue<span class="blink">█</span></p>
+  </div>
+</section>
+
+<section id="screen-message" class="screen">
+  <div class="console" id="console">
+    <div id="console-text"></div>
+  </div>
+</section>
+
+<audio id="bgm" loop preload="auto">
+  <source src="mus_z_ending.ogg" type="audio/ogg">
+</audio>
+
+<script>
+const PARAGRAFOS = [
+  "There doesnt seem to be anything here yet...",
+];
+
+const TYPE_SPEED_MS = 22;
+
+const screenWarning = document.getElementById('screen-warning');
+const screenMessage = document.getElementById('screen-message');
+const consoleBox = document.getElementById('console');
+const consoleText = document.getElementById('console-text');
+const bgm = document.getElementById('bgm');
+
+let stage = 'warning';
+let paragraphIndex = 0;
+let typeTimer = null;
+let currentLine = null;
+let currentCursor = null;
+
+function scrollToBottom(){
+  consoleBox.scrollTop = consoleBox.scrollHeight;
+}
+
+function typeParagraph(text){
+  stage = 'typing';
+
+  currentLine = document.createElement('div');
+  currentLine.className = 'line';
+  consoleText.appendChild(currentLine);
+
+  currentCursor = document.createElement('span');
+  currentCursor.className = 'cursor';
+  currentLine.appendChild(currentCursor);
+
+  let i = 0;
+  clearInterval(typeTimer);
+  typeTimer = setInterval(() => {
+    if (i < text.length){
+      currentCursor.insertAdjacentText('beforebegin', text[i]);
+      i++;
+      scrollToBottom();
+    } else {
+      finishParagraph();
+    }
+  }, TYPE_SPEED_MS);
+}
+
+function finishParagraph(){
+  clearInterval(typeTimer);
+  if (currentCursor) currentCursor.remove();
+  stage = 'waiting';
+
+  const prompt = document.createElement('div');
+  prompt.className = 'prompt-line';
+  prompt.textContent = 'Press Enter to continue';
+  consoleText.appendChild(prompt);
+  scrollToBottom();
+}
+
+function skipTyping(){
+  clearInterval(typeTimer);
+  if (currentCursor) currentCursor.remove();
+  currentLine.textContent = PARAGRAFOS[paragraphIndex];
+  finishParagraph();
+}
+
+function beginMessage(){
+  screenWarning.classList.remove('active');
+  screenMessage.classList.add('active');
+  document.body.classList.add('message-active');
+
+  bgm.volume = 0.55;
+  bgm.play().catch(() => { /* el navegador puede requerir otra interaccion */ });
+
+  paragraphIndex = 0;
+  typeParagraph(PARAGRAFOS[paragraphIndex]);
+}
+
+function advance(){
+  if (stage === 'typing'){
+    skipTyping();
+    return;
+  }
+  if (stage === 'waiting'){
+    if (paragraphIndex < PARAGRAFOS.length - 1){
+      paragraphIndex++;
+      typeParagraph(PARAGRAFOS[paragraphIndex]);
+    } else {
+      stage = 'done';
+      const fin = document.createElement('div');
+      fin.className = 'prompt-line';
+      fin.textContent = '— end of mesaage —';
+      consoleText.appendChild(fin);
+      scrollToBottom();
+    }
+  }
+}
+
+function handleKey(e){
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  if (stage === 'warning' || (screenWarning.classList.contains('active'))){
+    beginMessage();
+    return;
+  }
+  advance();
+}
+
+document.addEventListener('keydown', handleKey);
+
+</script>
+</body>
+</html>
